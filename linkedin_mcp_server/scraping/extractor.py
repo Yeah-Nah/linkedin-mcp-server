@@ -2265,6 +2265,12 @@ class LinkedInExtractor:
         a wrong-thread match. If the inbox scan finds nothing (a thread buried
         below the scrolled rows), it falls back to the `?searchTerm=` search as
         a last resort.
+
+        For a participant with multiple threads, the returned set — and thus
+        ``index`` selection in the caller — covers the threads visible in the
+        scanned inbox; the search fallback only runs when the inbox scan is
+        empty. Open a buried duplicate thread directly via ``thread_id``
+        (enumerate IDs with ``search_conversations``).
         """
         target_name = display_name.strip().lower()
 

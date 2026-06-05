@@ -26,10 +26,7 @@
     "search",
     "posts"
   ],
-  "icon": "assets/icons/linkedin.png",
-  "screenshots": [
-    "assets/screenshots/screenshot.png"
-  ],
+  "icon": "assets/icons/icon.png",
   "server": {
     "type": "uv",
     "entry_point": "linkedin_mcp_server/__main__.py",

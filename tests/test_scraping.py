@@ -1583,49 +1583,9 @@ class TestConnectWithPerson:
         mock_nav.assert_not_awaited()
         mock_submit.assert_not_awaited()
 
-    async def test_incoming_request_accept_falls_back_to_text_click(self, mock_page):
-        """Detection fired via the text table on a DOM variant without the
-        fingerprinted row; the click falls back to the locale table."""
-        extractor = LinkedInExtractor(mock_page)
-        pre = "Aklasur\n\n--\n\nDhaka\n\nAccept\nIgnore\nMore\nAbout\n"
-        post = "Aklasur\n\n· 1st\n\nDhaka\n\nMessage\nMore\nAbout\n"
-
-        with (
-            patch.object(
-                extractor,
-                "scrape_person",
-                self._mock_scrape(pre, follow_up_text=post),
-            ),
-            patch.object(
-                extractor,
-                "_read_action_signals",
-                new_callable=AsyncMock,
-                side_effect=[self._signals(), self._signals(compose=True)],
-            ),
-            patch.object(
-                extractor,
-                "_click_incoming_accept",
-                new_callable=AsyncMock,
-                return_value=False,
-            ),
-            patch.object(
-                extractor,
-                "click_button_by_text",
-                new_callable=AsyncMock,
-                return_value=True,
-            ) as mock_click,
-        ):
-            result = await extractor.connect_with_person("testuser")
-
-        assert result["status"] == "accepted"
-        from linkedin_mcp_server.scraping.connection import INCOMING_REQUEST_LABELS
-
-        accept_labels = {accept for accept, _ in INCOMING_REQUEST_LABELS.values()}
-        assert mock_click.await_args is not None
-        assert mock_click.await_args.args[0] in accept_labels
-
     async def test_incoming_request_send_failed_when_click_fails(self, mock_page):
-        """Neither the structural nor the text-table click landed."""
+        """Structural accept click did not land; no locale-text guessing —
+        report send_failed without navigating or clicking by text."""
         extractor = LinkedInExtractor(mock_page)
         pre = "Eric\n\n· 2.\n\nAachen\n\nAnnehmen\nIgnorieren\nMehr\nInfo\n"
 
@@ -1651,8 +1611,8 @@ class TestConnectWithPerson:
                 extractor,
                 "click_button_by_text",
                 new_callable=AsyncMock,
-                return_value=False,
-            ),
+                return_value=True,
+            ) as mock_text_click,
             patch.object(
                 extractor,
                 "_navigate_to_page",
@@ -1663,6 +1623,8 @@ class TestConnectWithPerson:
 
         assert result["status"] == "send_failed"
         mock_nav.assert_not_awaited()
+        # No text-based clicking on the destructive accept path.
+        mock_text_click.assert_not_awaited()
 
     async def test_incoming_request_send_failed_when_no_first_degree(self, mock_page):
         """Accept clicked but profile never transitions to 1st-degree."""

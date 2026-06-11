@@ -173,13 +173,21 @@ function findActionRoot(main) {
 # expander candidates because cover-video profiles render the player's
 # expander before the top-card row in DOM order.
 #
+# The search is scoped to the top card — the first <section> of <main>
+# (falling back to main's first child, then main). Profile pages render
+# the action row in the top card; feed, "people also viewed", and other
+# widgets live in later sections. Without the scope an unrelated widget
+# elsewhere in main with the same button shape could be misclassified and
+# its first labeled button clicked.
+#
 # Inlined into _ACTION_SIGNALS_JS and _CLICK_INCOMING_ACCEPT_JS so a
 # single change to the fingerprint propagates to both call sites.
 _FIND_INCOMING_ACTION_ROW_FN_JS = r"""
 function findIncomingActionRow(main) {
-  for (const expander of main.querySelectorAll('button[aria-expanded]')) {
+  const scope = main.querySelector('section') || main.firstElementChild || main;
+  for (const expander of scope.querySelectorAll('button[aria-expanded]')) {
     let el = expander.parentElement;
-    while (el && el !== main) {
+    while (el && el !== scope && el !== main) {
       if (el.querySelectorAll('button').length >= 2) {
         const buttons = el.querySelectorAll('button');
         const labeled = el.querySelectorAll('button[aria-label]');
@@ -2001,10 +2009,7 @@ class LinkedInExtractor:
         whether the user-visible Connect button is in the action bar
         or buried under the More menu.
         """
-        from linkedin_mcp_server.scraping.connection import (
-            INCOMING_REQUEST_LABELS,
-            detect_connection_state,
-        )
+        from linkedin_mcp_server.scraping.connection import detect_connection_state
 
         url = f"https://www.linkedin.com/in/{username}/"
 
@@ -2044,17 +2049,14 @@ class LinkedInExtractor:
             )
 
         if state == "incoming_request":
-            # Structural click first (fingerprinted row, first labeled
-            # button). The locale-table text click remains as fallback for
-            # DOM variants where detection fired via the text table but
-            # the fingerprint does not match; exact-match filtering in
-            # click_button_by_text cannot hit the Ignore label.
+            # Accept clicks the first labeled button in the fingerprinted
+            # row. There is deliberately no locale-text fallback: clicking
+            # a button matched by exact text anywhere in the page risks
+            # hitting the wrong control (or the Ignore button in another
+            # locale), and accepting/ignoring is irreversible. When the
+            # fingerprint does not match we report send_failed rather than
+            # guess.
             clicked = await self._click_incoming_accept()
-            if not clicked:
-                for accept_label, _ignore_label in INCOMING_REQUEST_LABELS.values():
-                    if await self.click_button_by_text(accept_label, scope="main"):
-                        clicked = True
-                        break
             if not clicked:
                 return _connection_result(
                     url,

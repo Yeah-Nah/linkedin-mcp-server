@@ -27,9 +27,11 @@ from linkedin_mcp_server.scraping.extractor import (
 pytestmark = pytest.mark.browser_dom
 
 
-INCOMING_TOP_CARD = """
-<div class="topcard">
-  <h1>Eric Langlouis</h1>
+# Each constant is a full <section>. The top card is always the first
+# section of <main>; the fingerprint is scoped there, so sidebar and feed
+# widgets live in later sections and must never match.
+
+INCOMING_ACTION_ROW = """
   <div class="actions">
     <button type="button" aria-label="Kontaktanfrage von Eric Langlouis annehmen"
       onclick="document.body.setAttribute('data-clicked','accept')">Annehmen</button>
@@ -37,11 +39,37 @@ INCOMING_TOP_CARD = """
       onclick="document.body.setAttribute('data-clicked','ignore')">Ignorieren</button>
     <button type="button" aria-expanded="false">Mehr</button>
   </div>
-</div>
 """
 
-SIDEBAR_CARDS = """
-<aside class="sidebar">
+INCOMING_TOP_CARD = f"""
+<section class="topcard">
+  <h1>Eric Langlouis</h1>
+  {INCOMING_ACTION_ROW}
+</section>
+"""
+
+VIDEO_PLAYER_BAR = """
+  <div class="player">
+    <button type="button" aria-label="Abspielen">▶</button>
+    <button type="button" aria-label="Stummschalten">🔇</button>
+    <button type="button" aria-label="Untertitel">CC</button>
+    <button type="button" aria-label="Vollbild">⛶</button>
+    <button type="button" aria-expanded="false" aria-label="Einstellungen">⚙</button>
+  </div>
+"""
+
+# Cover-video profile: the player's expander renders before the action row
+# within the same top card. The scan must skip it and still find the row.
+INCOMING_TOP_CARD_WITH_COVER = f"""
+<section class="topcard">
+  <h1>Eric Langlouis</h1>
+  {VIDEO_PLAYER_BAR}
+  {INCOMING_ACTION_ROW}
+</section>
+"""
+
+SIDEBAR_SECTION = """
+<section class="sidebar">
   <div class="card">
     <a href="https://www.linkedin.com/in/julien-f/">Julien</a>
     <a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AAAA"
@@ -53,43 +81,46 @@ SIDEBAR_CARDS = """
       aria-label="Rahul als Kontakt einladen">Vernetzen</a>
   </div>
   <button type="button">Mehr anzeigen</button>
-</aside>
+</section>
 """
 
-VIDEO_PLAYER_BAR = """
-<div class="player">
-  <button type="button" aria-label="Abspielen">▶</button>
-  <button type="button" aria-label="Stummschalten">🔇</button>
-  <button type="button" aria-label="Untertitel">CC</button>
-  <button type="button" aria-label="Vollbild">⛶</button>
-  <button type="button" aria-expanded="false" aria-label="Einstellungen">⚙</button>
-</div>
+# A widget elsewhere in main with the exact incoming-row shape (two labeled
+# buttons + one unlabeled expander). It must NOT match because it lives in a
+# later section, outside the scoped top card.
+UNRELATED_MATCHING_WIDGET = """
+<section class="feed">
+  <div class="actions">
+    <button type="button" aria-label="Gefällt mir">A</button>
+    <button type="button" aria-label="Kommentieren">B</button>
+    <button type="button" aria-expanded="false">Mehr</button>
+  </div>
+</section>
 """
 
 CONNECTED_TOP_CARD = """
-<div class="topcard">
+<section class="topcard">
   <h1>Fadi Al Eliwi</h1>
   <div class="actions">
     <a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3ABBB"
       aria-disabled="false">Nachricht</a>
     <button type="button" aria-expanded="false">Mehr</button>
   </div>
-</div>
+</section>
 """
 
 FOLLOW_ONLY_TOP_CARD = """
-<div class="topcard">
+<section class="topcard">
   <h1>Verena</h1>
   <div class="actions">
     <button type="button" aria-label="Verena folgen">Folgen</button>
     <a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3ACCC">Nachricht</a>
     <button type="button" aria-expanded="false">Mehr</button>
   </div>
-</div>
+</section>
 """
 
 PENDING_TOP_CARD = """
-<div class="topcard">
+<section class="topcard">
   <h1>Florian</h1>
   <div class="actions">
     <a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3ADDD">Nachricht</a>
@@ -97,42 +128,49 @@ PENDING_TOP_CARD = """
       aria-label="Ausstehend, klicken zum Zurückziehen">Ausstehend</a>
     <button type="button" aria-expanded="false">Mehr</button>
   </div>
-</div>
+</section>
 """
 
 EXPANDER_FIRST_BAR = """
-<div class="hostile">
+<section class="hostile">
   <button type="button" aria-expanded="false">⚙</button>
   <button type="button" aria-label="Aktion A">A</button>
   <button type="button" aria-label="Aktion B">B</button>
-</div>
+</section>
 """
 
 EXTRA_BUTTON_ROW = """
-<div class="hostile">
+<section class="hostile">
   <button type="button" aria-label="Aktion A">A</button>
   <button type="button" aria-label="Aktion B">B</button>
   <button type="button" aria-expanded="false">Mehr</button>
   <button type="button">Extra</button>
-</div>
+</section>
 """
 
 
-def _page_html(*fragments: str) -> str:
-    return f"<html><body><main>{''.join(fragments)}</main></body></html>"
+def _page_html(*sections: str) -> str:
+    return f"<html><body><main>{''.join(sections)}</main></body></html>"
 
 
 @pytest.fixture
 async def dom_page():
-    """Real chromium page, or skip when no browser is installed."""
-    try:
-        async with async_playwright() as p:
+    """Real chromium page, or skip when no browser is installed.
+
+    Only launch/setup is guarded by the skip — the ``yield`` is outside it
+    so an assertion failure or JS error in a test body is never swallowed
+    into a skip.
+    """
+    async with async_playwright() as p:
+        try:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
+        except Exception as exc:  # browser binary missing
+            pytest.skip(f"chromium unavailable: {exc}")
+        try:
             yield page
+        finally:
             await browser.close()
-    except Exception as exc:  # browser binary missing
-        pytest.skip(f"chromium unavailable: {exc}")
 
 
 async def _signals(page, html: str) -> dict:
@@ -142,7 +180,7 @@ async def _signals(page, html: str) -> dict:
 
 class TestIncomingActionRowFingerprint:
     async def test_incoming_row_detected_next_to_sidebar_cards(self, dom_page):
-        data = await _signals(dom_page, _page_html(INCOMING_TOP_CARD, SIDEBAR_CARDS))
+        data = await _signals(dom_page, _page_html(INCOMING_TOP_CARD, SIDEBAR_SECTION))
         assert data["hasIncomingActionRow"] is True
 
     async def test_video_player_bar_not_detected(self, dom_page):
@@ -157,9 +195,18 @@ class TestIncomingActionRowFingerprint:
 
     async def test_preceding_nonmatching_expander_does_not_abort_scan(self, dom_page):
         # Cover-video layout: the player's expander renders before the
-        # top-card row in DOM order; the scan must continue past it.
-        data = await _signals(dom_page, _page_html(VIDEO_PLAYER_BAR, INCOMING_TOP_CARD))
+        # action row inside the same top card; the scan must continue past
+        # it and still find the row.
+        data = await _signals(dom_page, _page_html(INCOMING_TOP_CARD_WITH_COVER))
         assert data["hasIncomingActionRow"] is True
+
+    async def test_matching_widget_outside_top_card_not_detected(self, dom_page):
+        # F1 regression: a widget with the exact incoming-row shape in a
+        # later section must not match — the scan is scoped to the top card.
+        data = await _signals(
+            dom_page, _page_html(CONNECTED_TOP_CARD, UNRELATED_MATCHING_WIDGET)
+        )
+        assert data["hasIncomingActionRow"] is False
 
     async def test_extra_unlabeled_button_fails_count_guard(self, dom_page):
         data = await _signals(dom_page, _page_html(EXTRA_BUTTON_ROW))
@@ -174,13 +221,13 @@ class TestIncomingActionRowFingerprint:
         assert data["hasIncomingActionRow"] is False
 
     async def test_connected_row_not_detected(self, dom_page):
-        data = await _signals(dom_page, _page_html(CONNECTED_TOP_CARD, SIDEBAR_CARDS))
+        data = await _signals(dom_page, _page_html(CONNECTED_TOP_CARD, SIDEBAR_SECTION))
         assert data["hasIncomingActionRow"] is False
 
 
 class TestClickIncomingAccept:
     async def test_clicks_first_labeled_button_only(self, dom_page):
-        await dom_page.set_content(_page_html(INCOMING_TOP_CARD, SIDEBAR_CARDS))
+        await dom_page.set_content(_page_html(INCOMING_TOP_CARD, SIDEBAR_SECTION))
         clicked = await dom_page.evaluate(_CLICK_INCOMING_ACCEPT_JS)
         assert clicked is True
         # Patchright evaluates in an isolated world; page-world variables

@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 
-from linkedin_mcp_server.common_utils import secure_mkdir
+from linkedin_mcp_server.common_utils import harden_linkedin_tree, secure_mkdir
 from linkedin_mcp_server.core import (
     AuthenticationError,
     BrowserManager,
@@ -19,7 +19,7 @@ from linkedin_mcp_server.core import (
     is_logged_in,
     resolve_remember_me_prompt,
 )
-from linkedin_mcp_server.core.browser import _harden_linkedin_tree
+
 
 from linkedin_mcp_server.common_utils import utcnow_iso
 from linkedin_mcp_server.config import get_config
@@ -250,7 +250,7 @@ async def validate_imported_cookies(cookie_path: Path, profile_dir: Path) -> boo
     """
     launch_options, viewport = _launch_options()
     secure_mkdir(profile_dir)
-    _harden_linkedin_tree(profile_dir)
+    harden_linkedin_tree(profile_dir)
     browser = _make_browser(
         profile_dir, launch_options=launch_options, viewport=viewport
     )

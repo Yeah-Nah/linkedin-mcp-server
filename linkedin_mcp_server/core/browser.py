@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import stat
 from pathlib import Path
 from typing import Any
 
@@ -14,35 +13,18 @@ from patchright.async_api import (
     async_playwright,
 )
 
-from linkedin_mcp_server.common_utils import secure_mkdir, secure_write_text
+from linkedin_mcp_server.common_utils import (
+    harden_linkedin_tree,
+    secure_mkdir,
+    secure_write_text,
+)
 
 from .exceptions import NetworkError
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_USER_DATA_DIR = Path.home() / ".linkedin-mcp" / "profile"
-_PRIVATE_DIR_MODE = 0o700
 _PRIVATE_FILE_MODE = 0o600
-
-
-def _harden_linkedin_tree(path: Path) -> None:
-    """Ensure dirs from *path* up to ``.linkedin-mcp`` are owner-only (``0o700``).
-
-    Complements :func:`secure_mkdir` by hardening pre-existing directories
-    that may have been created with default umask permissions.  No-op on
-    Windows or when *path* is not inside a ``.linkedin-mcp`` directory.
-    """
-    if os.name == "nt":
-        return
-    d = path if path.is_dir() else path.parent
-    # Bail out early when the path is not inside a .linkedin-mcp tree.
-    if not any(p.name == ".linkedin-mcp" for p in (d, *d.parents)):
-        return
-    for p in (d, *d.parents):
-        if p.is_dir() and stat.S_IMODE(p.stat().st_mode) != _PRIVATE_DIR_MODE:
-            p.chmod(_PRIVATE_DIR_MODE)
-        if p.name == ".linkedin-mcp":
-            return
 
 
 class BrowserManager:
@@ -91,7 +73,7 @@ class BrowserManager:
             self._playwright = await async_playwright().start()
 
             secure_mkdir(Path(self.user_data_dir))
-            _harden_linkedin_tree(Path(self.user_data_dir))
+            harden_linkedin_tree(Path(self.user_data_dir))
 
             context_options: dict[str, Any] = {
                 "headless": self.headless,
@@ -214,7 +196,7 @@ class BrowserManager:
                 if "linkedin.com" in c.get("domain", "")
             ]
             secure_mkdir(path.parent)
-            _harden_linkedin_tree(path.parent)
+            harden_linkedin_tree(path.parent)
             secure_write_text(
                 path, json.dumps(cookies, indent=2), mode=_PRIVATE_FILE_MODE
             )
@@ -234,7 +216,7 @@ class BrowserManager:
 
         storage_path = Path(path)
         secure_mkdir(storage_path.parent)
-        _harden_linkedin_tree(storage_path.parent)
+        harden_linkedin_tree(storage_path.parent)
         try:
             await self._context.storage_state(
                 path=storage_path,

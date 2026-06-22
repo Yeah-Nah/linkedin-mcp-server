@@ -36,8 +36,8 @@ from linkedin_mcp_server.browser_import.extract import (
     extract_linkedin_cookies,
     read_li_at_meta,
 )
-from linkedin_mcp_server.common_utils import secure_write_text
-from linkedin_mcp_server.core.browser import _harden_linkedin_tree
+from linkedin_mcp_server.common_utils import harden_linkedin_tree, secure_write_text
+
 from linkedin_mcp_server.exceptions import (
     CookieDecryptionError,
     NoLinkedInSessionFoundError,
@@ -171,7 +171,7 @@ def _extract_and_stage(profile: BrowserProfile, cookie_path: Path) -> bool:
 
     payload = json.dumps([c.to_playwright() for c in cookies], indent=2)
     secure_write_text(cookie_path, payload, mode=_PRIVATE_FILE_MODE)
-    _harden_linkedin_tree(cookie_path.parent)
+    harden_linkedin_tree(cookie_path.parent)
     logger.info(
         "Validating %d LinkedIn cookies from %s/%s",
         len(cookies),

@@ -163,9 +163,15 @@ def _linux_safe_storage_password(app_token: str) -> bytes:
             ["secret-tool", "lookup", "application", app_token],
             capture_output=True,
             check=False,
+            timeout=10.0,
         )
         if result.returncode == 0 and result.stdout:
             return result.stdout
+    except subprocess.TimeoutExpired:
+        # An absent gnome-keyring or an unresponsive D-Bus session can hang
+        # secret-tool forever; bound it like the macOS keychain read so the
+        # import never stalls the server, then fall back to peanuts.
+        logger.debug("secret-tool timed out; using peanuts fallback")
     except OSError:
         logger.debug("secret-tool unavailable; using peanuts fallback")
     return _LINUX_FALLBACK_PASSWORD

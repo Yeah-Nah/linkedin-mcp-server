@@ -78,6 +78,7 @@ class EnvironmentKeys:
     LOGIN_INLINE_WAIT = "LOGIN_INLINE_WAIT"
     IMPORT_FROM_BROWSER = "IMPORT_FROM_BROWSER"
     AUTO_IMPORT_FROM_BROWSER = "AUTO_IMPORT_FROM_BROWSER"
+    EAGER_FULL_CHROMIUM = "EAGER_FULL_CHROMIUM"
 
 
 def is_interactive_environment() -> bool:
@@ -241,6 +242,14 @@ def load_from_env(config: AppConfig) -> AppConfig:
             config.browser.auto_import_from_browser = False
         elif auto_import_value in TRUTHY_VALUES:
             config.browser.auto_import_from_browser = True
+
+    # Install full chromium up front instead of lazily on the first headed login.
+    if eager_full_env := os.environ.get(EnvironmentKeys.EAGER_FULL_CHROMIUM):
+        eager_full_value = _normalize_env(eager_full_env)
+        if eager_full_value in FALSY_VALUES:
+            config.browser.eager_full_chromium = False
+        elif eager_full_value in TRUTHY_VALUES:
+            config.browser.eager_full_chromium = True
 
     return config
 
@@ -423,6 +432,29 @@ def load_from_args(config: AppConfig) -> AppConfig:
         ),
     )
 
+    eager_full_group = parser.add_mutually_exclusive_group()
+    eager_full_group.add_argument(
+        "--eager-full-chromium",
+        dest="eager_full_chromium",
+        action="store_true",
+        default=None,
+        help=(
+            "Install full Chrome for Testing up front during browser setup "
+            "instead of lazily on the first headed login (pre-warms the headed "
+            "login fallback at the cost of a larger initial download)"
+        ),
+    )
+    eager_full_group.add_argument(
+        "--no-eager-full-chromium",
+        dest="eager_full_chromium",
+        action="store_false",
+        default=None,
+        help=(
+            "Install full Chrome for Testing lazily on the first headed login "
+            "(default; overrides EAGER_FULL_CHROMIUM=true)."
+        ),
+    )
+
     args = parser.parse_args()
 
     # Update configuration with parsed arguments
@@ -497,6 +529,9 @@ def load_from_args(config: AppConfig) -> AppConfig:
 
     if args.auto_import is not None:
         config.browser.auto_import_from_browser = args.auto_import
+
+    if args.eager_full_chromium is not None:
+        config.browser.eager_full_chromium = args.eager_full_chromium
 
     return config
 

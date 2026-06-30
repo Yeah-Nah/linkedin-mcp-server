@@ -102,6 +102,14 @@ class TestBuildJobSearchUrl:
         url = LinkedInExtractor._build_job_search_url("python", job_type="F")
         assert "f_JT=F" in url
 
+    def test_company_urn_included(self):
+        url = LinkedInExtractor._build_job_search_url("python", company_urn="1035")
+        assert "f_C=1035" in url
+
+    def test_company_urn_absent_omitted(self):
+        url = LinkedInExtractor._build_job_search_url("python")
+        assert "f_C" not in url
+
     def test_all_filters_combined(self):
         url = LinkedInExtractor._build_job_search_url(
             "python",

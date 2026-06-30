@@ -88,6 +88,7 @@ def register_job_tools(
         work_type: str | None = None,
         easy_apply: bool = False,
         sort_by: str | None = None,
+        company_urn: str | None = None,
         extractor: Any | None = None,
     ) -> dict[str, Any]:
         """
@@ -106,6 +107,7 @@ def register_job_tools(
             work_type: Filter by work type, comma-separated (on_site, remote, hybrid)
             easy_apply: Only show Easy Apply jobs (default false)
             sort_by: Sort results (date, relevance)
+            company_urn: Filter by company numeric ID (e.g., "1035" for LinkedIn)
 
         Returns:
             Dict with url, sections (name -> raw text), job_ids (list of
@@ -136,6 +138,7 @@ def register_job_tools(
                 work_type=work_type,
                 easy_apply=easy_apply,
                 sort_by=sort_by,
+                company_urn=company_urn,
             )
 
             await ctx.report_progress(progress=100, total=100, message="Complete")

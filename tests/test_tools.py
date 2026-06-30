@@ -641,6 +641,26 @@ class TestJobTools:
         assert "search_results" in result["sections"]
         assert "pages_visited" not in result
 
+    async def test_search_jobs_company_urn_forwarded(self, mock_context):
+        expected = {
+            "url": "https://www.linkedin.com/jobs/search/?keywords=python&f_C=1035",
+            "sections": {"search_results": "Job 1"},
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.job import register_job_tools
+
+        mcp = FastMCP("test")
+        register_job_tools(mcp)
+
+        tool_fn = await get_tool_fn(mcp, "search_jobs")
+        await tool_fn(
+            "python", mock_context, company_urn="1035", extractor=mock_extractor
+        )
+        mock_extractor.search_jobs.assert_called_once()
+        _, kwargs = mock_extractor.search_jobs.call_args
+        assert kwargs.get("company_urn") == "1035"
+
 
 class TestGetSidebarProfilesTool:
     async def test_get_sidebar_profiles_success(self, mock_context):
